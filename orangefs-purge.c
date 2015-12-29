@@ -11,7 +11,8 @@
  * -------------------------------------------------------------------------------------------------
  * This program will remove files not read nor written in the past 31 days from the time this
  * program is executed. It must be run as root, so proceed with caution. Do not type the # character
- * shown in the examples to follow. 
+ * shown in the examples to follow. Also be sure that you DO NOT include a trailing '/' in the path
+ * argument.
  *
  *     # orangefs-purge /path/of/orangefs/directory/to/be/purged
  *
@@ -25,10 +26,16 @@
  *
  * Various results of the purge are logged in the following file:
  *
- *     /var/log/orangefs-purge/<integer_timestamp_of_program_start_time>.log
+ *     /var/log/orangefs-purge/<integer_timestamp_of_program_start_time>-<basename of directory argument>.log
  *
  * This allows you to run this program as a cron job and have a separate log file for each execution
  * of the program.
+ *
+ * Executing the following command enables the creation of a separate log for multiple "user
+ * directories". Note, this will cause one scan to be run per user directory rather than one scan of
+ * the overall parent directory:
+ *
+ *     find /some/path -mindepth 1 -maxdepth 1 -type d -exec bash -c "orangefs-purge '{}'" \;
  *
  * Note, the parent directory of the log file must exist and be writable. "make install" will
  * attempt to set this up for you!.
@@ -657,15 +664,17 @@ int main(int argc, char **argv)
     current_time_str = human_readable_time(current_time);
     remove_time_str = human_readable_time(remove_time);
 
-    snprintf(log_path, PATH_MAX, "%s/%llu.log", LOG_DIR, LLU(current_time));
+    /* determine basename of supplied path and embed it in the log file name. */
+    snprintf(log_path, PATH_MAX, "%s/%llu-%s.log", LOG_DIR, LLU(current_time), basename(argv[1]));
     DEBUG("INFO: log_path\t%s\n", log_path);
-    logp = fopen(log_path, "a");
+    logp = fopen(log_path, "w");
     if(!logp)
     {
         fprintf(stderr, "Couldn't open orangefs-purge log for appending!\n");
         goto cleanup_times;
     }
 
+    fprintf(logp, "directory\t%s\n", argv[1]);
     fprintf(logp, "dry_run\t%s\n", dry_run == 0 ? "false" : "true");
     fprintf(logp, "current_time\t%llu\n", LLU(current_time));
     fprintf(logp, "current_time_str\t%s", current_time_str);
