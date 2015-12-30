@@ -14,7 +14,7 @@ ORANGEFS_PURGE_LOG_DIR=/var/log/orangefs-purge
 ORANGEFS_PURGE_INSTALL_DIR=/usr/local/sbin
 
 orangefs-purge: orangefs-purge.c
-	gcc -g -Wall -Og \
+	gcc -g -Wall -O2 \
 	    -D FILES_REMOVED_LOGGER_ENABLED=0 \
 	    -D FILES_KEPT_LOGGER_ENABLED=0 \
 	    -D DEBUG_ON=0 \

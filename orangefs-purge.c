@@ -35,7 +35,7 @@
  * directories". Note, this will cause one scan to be run per user directory rather than one scan of
  * the overall parent directory:
  *
- *     find /some/path -mindepth 1 -maxdepth 1 -type d -exec bash -c "orangefs-purge '{}'" \;
+ *     find /users -mindepth 1 -maxdepth 1 -type d -exec bash -c "orangefs-purge '{}'" \;
  *
  * Note, the parent directory of the log file must exist and be writable. "make install" will
  * attempt to set this up for you!.
@@ -134,6 +134,7 @@ struct purge_stats_s {
     uint64_t kept_fils;     /* Files not removed. */
     uint64_t lnks;          /* Number of symlinks discovered. */
     uint64_t dirs;          /* Number of directories discovered. */
+    uint64_t unknown;       /* Number of dirents with unknown type discovered. */
 };
 
 /* For any of this to work, the system time must be correct and roughly in sync between all the
@@ -145,7 +146,7 @@ struct purge_stats_s {
  */
 
 /* GLOBAL VARIABLES */
-struct purge_stats_s pstats = {0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL};
+struct purge_stats_s pstats = {0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL};
 PVFS_credential creds;
 PVFS_time remove_time = 0LL;
 FILE *logp = NULL;
@@ -164,7 +165,8 @@ void log_pstats(FILE *out, struct purge_stats_s *psp)
                 "kept_bytes\t%llu\n"
                 "kept_files\t%llu\n"
                 "directories\t%llu\n"
-                "symlinks\t%llu\n",
+                "symlinks\t%llu\n"
+                "unknown\t%llu\n",
                 LLU(psp->rm_bytes),
                 LLU(psp->rm_fils),
                 LLU(psp->frm_bytes),
@@ -172,8 +174,83 @@ void log_pstats(FILE *out, struct purge_stats_s *psp)
                 LLU(psp->kept_bytes),
                 LLU(psp->kept_fils),
                 LLU(psp->dirs),
-                LLU(psp->lnks));
+                LLU(psp->lnks),
+                LLU(psp->unknown));
     }
+}
+
+/* The following macro function should be used in the ps_* functions below. The macro accepts five
+ * arguments:
+ *   - psp: a pointer to the purge_stats_s struct
+ *   - n:   the numerator of your division calculation
+ *   - d:   the denominator of your division calculation
+ *   - r:   the return value to use instead of: the result of dividing by zero OR if psp is NULL
+ *   - f:   a factor to multiply the result by (useful for calculating percentages)
+ */
+#define PS_CORRECT_NAN(psp, n, d, r, f)                 \
+    do                                                  \
+    {                                                   \
+        if((psp))                                       \
+        {                                               \
+            float numerator = (float) (n);              \
+            uint64_t denominator = (d);                 \
+            if(denominator > 0)                         \
+            {                                           \
+                return (numerator / denominator) * (f); \
+            }                                           \
+            else                                        \
+            {                                           \
+                return (r);                             \
+            }                                           \
+        }                                               \
+                                                        \
+        return (r);                                     \
+                                                        \
+    } while(0)
+
+float ps_percent_bytes_removed(struct purge_stats_s *psp)
+{
+    PS_CORRECT_NAN(psp,
+                   psp->rm_bytes,
+                   psp->rm_bytes + psp->frm_bytes + psp->kept_bytes,
+                   0.0,
+                   100.0);
+}
+
+float ps_percent_files_removed(struct purge_stats_s *psp)
+{
+    PS_CORRECT_NAN(psp,
+                   psp->rm_fils,
+                   psp->rm_fils + psp->frm_fils + psp->kept_fils,
+                   0.0,
+                   100.0);
+}
+
+float ps_pre_purge_avg_file_size(struct purge_stats_s *psp)
+{
+    PS_CORRECT_NAN(psp,
+                   psp->rm_bytes + psp->frm_bytes + psp->kept_bytes,
+                   psp->rm_fils + psp->frm_fils + psp->kept_fils,
+                   0.0,
+                   1.0);
+}
+
+float ps_post_purge_avg_file_size(struct purge_stats_s *psp)
+{
+    PS_CORRECT_NAN(psp,
+                   psp->frm_bytes + psp->kept_bytes,
+                   psp->frm_fils + psp->kept_fils,
+                   0.0,
+                   1.0);
+}
+
+float ps_purged_avg_file_size(struct purge_stats_s *psp)
+{
+    PS_CORRECT_NAN(psp,
+                   psp->rm_bytes,
+                   psp->rm_fils,
+                   0.0,
+                   1.0);
 }
 
 void log_pstats_more(FILE *out, struct purge_stats_s *psp)
@@ -186,13 +263,11 @@ void log_pstats_more(FILE *out, struct purge_stats_s *psp)
                 "pre_purge_avg_file_size\t%f\n"
                 "post_purge_avg_file_size\t%f\n"
                 "purged_avg_file_size\t%f\n",
-                (((float) psp->rm_bytes) / 
-                    (psp->rm_bytes + psp->frm_bytes + psp->kept_bytes)) * 100,
-                ((float)(psp->rm_fils) / (psp->rm_fils + psp->frm_fils + psp->kept_fils)) * 100,
-                (float)(psp->rm_bytes + psp->frm_bytes + psp->kept_bytes) /
-                    (psp->rm_fils + psp->frm_fils + psp->kept_fils),
-                (float)(psp->frm_bytes + psp->kept_bytes) / (psp->frm_fils + psp->kept_fils),
-                (float)(psp->rm_bytes) / psp->rm_fils);
+                ps_percent_bytes_removed(psp),
+                ps_percent_files_removed(psp),
+                ps_pre_purge_avg_file_size(psp),
+                ps_post_purge_avg_file_size(psp),
+                ps_purged_avg_file_size(psp));
     }
 }
 
@@ -473,7 +548,11 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
                 }
                 else
                 {
-                    fprintf(stderr, "%s: ERROR: UNRECOGNIZED DIRENT TYPE!?\n", __func__);
+                    fprintf(stderr,
+                            "%s: ERROR: UNRECOGNIZED DIRENT TYPE at path: %s\n",
+                            __func__,
+                            dirent_path);
+                    pstats.unknown++;
                 }
 
                 PVFS_util_release_sys_attr(&rdplus_response.attr_array[i]);
@@ -484,13 +563,13 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
              * Is there a problem with PINT_MALLOC?
              * Why can't I just free! */
 #if USING_PINT_MALLOC == 1
-                free((char *) (rdplus_response.dirent_array) - 32);
-                free((char *) (rdplus_response.stat_err_array) - 32);
-                free((char *) (rdplus_response.attr_array) - 32);
+            free((char *) (rdplus_response.dirent_array) - 32);
+            free((char *) (rdplus_response.stat_err_array) - 32);
+            free((char *) (rdplus_response.attr_array) - 32);
 #else
-                free(rdplus_response.dirent_array);
-                free(rdplus_response.stat_err_array);
-                free(rdplus_response.attr_array);
+            free(rdplus_response.dirent_array);
+            free(rdplus_response.stat_err_array);
+            free(rdplus_response.attr_array);
 #endif
 
         } /* Check for more dirents via PVFS_sys_readdirplus! */
@@ -670,8 +749,8 @@ int main(int argc, char **argv)
     logp = fopen(log_path, "w");
     if(!logp)
     {
-        fprintf(stderr, "Couldn't open orangefs-purge log for appending!\n");
-        goto cleanup_times;
+        fprintf(stderr, "Couldn't open orangefs-purge log for appending. Now logging to stderr!\n");
+        logp = stderr;
     }
 
     fprintf(logp, "directory\t%s\n", argv[1]);
@@ -692,7 +771,6 @@ int main(int argc, char **argv)
     log_pstats(logp, &pstats);
     log_pstats_more(logp, &pstats);
 
-cleanup_times:
     free(current_time_str);
     free(remove_time_str);
     free(finish_time_str);
@@ -703,12 +781,12 @@ cleanup_cred:
 
     if(ret == 0)
     {
-        fprintf(logp, "PURGE_SUCCESS\ttrue\n");
+        fprintf(logp, "purge_success\ttrue\n");
         return 0;
     }
     else
     {
-        fprintf(logp, "PURGE_SUCCESS\tfalse\n");
+        fprintf(logp, "purge_success\tfalse\n");
         return 1;
     }
 }
