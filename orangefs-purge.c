@@ -99,10 +99,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <getopt.h>
 
 #include "pvfs2.h"
 #include <pvfs2-usrint.h>
 
+#define PROGRAM_NAME "orangefs-purge"
 #define LOG_DIR             "/var/log/orangefs-purge"
 #define DRY_RUN_ENV_VAR     "DRY_RUN"
 
@@ -137,6 +139,17 @@ struct purge_stats_s {
     uint64_t unknown;       /* Number of dirents with unknown type discovered. */
 };
 
+struct option const long_opts[] =
+{
+    {"removal-basis-time", required_argument, NULL, 'r'},
+    {NULL, 0, NULL, 0}
+};
+
+struct orangefs_purge_options_s
+{
+    PVFS_time removal_basis_time;
+};
+
 /* For any of this to work, the system time must be correct and roughly in sync between all the
  * OrangeFS server nodes, OrangeFS clients, and the system from which the purge program will be
  * executed. If this is not the case, then unintended consequences are possible.
@@ -148,9 +161,27 @@ struct purge_stats_s {
 /* GLOBAL VARIABLES */
 struct purge_stats_s pstats = {0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL};
 PVFS_credential creds;
-PVFS_time remove_time = 0LL;
+PVFS_time removal_basis_time = 0LL;
 FILE *logp = NULL;
 int dry_run = 0;
+
+void orangefs_purge_option_init(struct orangefs_purge_options_s *x)
+{
+    x->removal_basis_time = 0LL;
+}
+
+void usage(int status)
+{
+    printf("Usage: %s [OPTION]... <ABSOLUTE_PATH_OF_DIRECTORY_TO_BE_PURGED>\n", PROGRAM_NAME);
+    fputs("\
+    Purges OrangeFS files based on the removal-basis-time. If atime and mtime values of a file\n\
+    are both less than the removal-basis-time then the file will be purged.\n\n\
+        -r, --removal-basis-time    supply your own removal-basis-time (in seconds since the\n\
+                                    UNIX epoch), rather than relying on the default which is 31\n\
+                                    days previous to this program's execution time.\n",
+        stdout);
+    exit (status);
+}
 
 /* Log purge statistics */
 void log_pstats(FILE *out, struct purge_stats_s *psp)
@@ -477,8 +508,8 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
                 {
                     DEBUG("\t\tFILE\n");
 
-                    if(buf.st_atime < (time_t) remove_time &&
-                       buf.st_mtime < (time_t) remove_time)
+                    if(buf.st_atime < (time_t) removal_basis_time &&
+                       buf.st_mtime < (time_t) removal_basis_time)
                     {
 
 #if FILES_REMOVED_LOGGER_ENABLED == 1
@@ -599,8 +630,9 @@ int main(int argc, char **argv)
     PVFS_time finish_time = 0LL;
     PVFS_time creds_timeout = 0LL;
     char *current_time_str = NULL;
-    char *remove_time_str = NULL;
+    char *removal_basis_time_str = NULL;
     char *finish_time_str = NULL;
+    char *dir = NULL;
     char *dry_run_str = NULL;
     char log_path[PATH_MAX] = { 0 };
     char resolved_path[PVFS_PATH_MAX] = { 0 };
@@ -608,6 +640,8 @@ int main(int argc, char **argv)
     PVFS_object_ref dir_ref;
     PVFS_sysresp_lookup lk_response;
     int ret;
+    int c;
+    struct orangefs_purge_options_s opts;
     PVFS_fs_id fs_id;
 
     if(geteuid() != 0)
@@ -616,11 +650,30 @@ int main(int argc, char **argv)
         return -1;
     }
 
+#if 0
+TODO
     if(argc != 2)
     {
         fprintf(stderr, "usage: %s /orangefs/directory/tree/to/scan\n", argv[0]);
         return -1;
     }
+#endif
+
+    orangefs_purge_option_init(&opts);
+
+    while((c = getopt_long(argc, argv, "r:", long_opts, NULL)) != -1)
+    {
+        switch (c)
+        {
+            case 'r':
+                opts.removal_basis_time = strtoull(optarg, NULL, 0);
+                break;
+            default:
+                usage(EXIT_FAILURE);
+        }
+    }
+
+    dir = argv[optind];
 
     /* Dry Run? */
     dry_run_str = getenv(DRY_RUN_ENV_VAR);
@@ -670,7 +723,7 @@ int main(int argc, char **argv)
     DEBUG("INFO: Credential timeout is %f days in the future.\n",
           ((float)(creds.timeout - current_time) / DAY_SECS));
 
-    if((ret = lstat(argv[1], &arg_stat)))
+    if((ret = lstat(dir, &arg_stat)))
     {
         perror("Could not stat path supplied as the first argument, reason= ");
         ret = -1;
@@ -681,12 +734,12 @@ int main(int argc, char **argv)
     {
         fprintf(stderr,
                 "ERROR: supplied argument is a valid path but not a directory! path = %s\n",
-                argv[1]);
+                dir);
         ret = -1;
         goto cleanup_cred;
     }
 
-    ret = PVFS_util_resolve(argv[1], 
+    ret = PVFS_util_resolve(dir, 
                             &fs_id, 
                             resolved_path, 
                             PVFS_PATH_MAX);
@@ -697,7 +750,7 @@ int main(int argc, char **argv)
                 "%s: ERROR: PVFS_util_resolve failed, could not find"
                 " file system for %s\n",
                 __func__,
-                argv[1]);
+                dir);
         ret = -1;
         goto cleanup_cred;
     }
@@ -736,15 +789,28 @@ int main(int argc, char **argv)
           LLU(dir_ref.handle),
           dir_ref.fs_id);
 
-    /* Files with atime less than remove_time will be removed. */
-    remove_time = current_time - THIRTYONE_DAYS_SECS;
-
     /* Convert time to human readable string format. */
     current_time_str = human_readable_time(current_time);
-    remove_time_str = human_readable_time(remove_time);
+
+    /* NOTE Files with atime and mtime less than removal_basis_time will be removed. */
+
+    /* Since a timestamp of 0 predates OrangeFS, for this program, it is safe to assume the
+     * removal_basis_time was not configured by the user or the user is indicating they wan't to
+     * use the default removal policy of 31 days prior to this program's execution start time as
+     * calculated below. */
+    if(opts.removal_basis_time == 0)
+    {
+        removal_basis_time = current_time - THIRTYONE_DAYS_SECS;
+    }
+    else
+    {
+        removal_basis_time = opts.removal_basis_time;
+    }
+
+    removal_basis_time_str = human_readable_time(removal_basis_time);
 
     /* determine basename of supplied path and embed it in the log file name. */
-    snprintf(log_path, PATH_MAX, "%s/%llu-%s.log", LOG_DIR, LLU(current_time), basename(argv[1]));
+    snprintf(log_path, PATH_MAX, "%s/%llu-%s.log", LOG_DIR, LLU(current_time), basename(dir));
     DEBUG("INFO: log_path\t%s\n", log_path);
     logp = fopen(log_path, "w");
     if(!logp)
@@ -753,14 +819,14 @@ int main(int argc, char **argv)
         logp = stderr;
     }
 
-    fprintf(logp, "directory\t%s\n", argv[1]);
+    fprintf(logp, "directory\t%s\n", dir);
     fprintf(logp, "dry_run\t%s\n", dry_run == 0 ? "false" : "true");
     fprintf(logp, "current_time\t%llu\n", LLU(current_time));
     fprintf(logp, "current_time_str\t%s", current_time_str);
-    fprintf(logp, "remove_time\t%llu\n", LLU(remove_time));
-    fprintf(logp, "remove_time_str\t%s", remove_time_str);
+    fprintf(logp, "removal_basis_time\t%llu\n", LLU(removal_basis_time));
+    fprintf(logp, "removal_basis_time_str\t%s", removal_basis_time_str);
 
-    ret = walk_rdp_and_purge(argv[1], &dir_ref);
+    ret = walk_rdp_and_purge(dir, &dir_ref);
 
     finish_time = get_current_time();
     finish_time_str = human_readable_time(finish_time);
@@ -772,7 +838,7 @@ int main(int argc, char **argv)
     log_pstats_more(logp, &pstats);
 
     free(current_time_str);
-    free(remove_time_str);
+    free(removal_basis_time_str);
     free(finish_time_str);
 
 cleanup_cred:
