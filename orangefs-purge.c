@@ -652,15 +652,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-#if 0
-TODO
-    if(argc != 2)
-    {
-        fprintf(stderr, "usage: %s /orangefs/directory/tree/to/scan\n", argv[0]);
-        return -1;
-    }
-#endif
-
     orangefs_purge_option_init(&opts);
 
     while((c = getopt_long(argc, argv, "?hr:", long_opts, NULL)) != -1)
@@ -680,6 +671,10 @@ TODO
     }
 
     dir = argv[optind];
+    if(dir == NULL)
+    {
+        usage(EXIT_FAILURE);
+    }
 
     /* Dry Run? */
     dry_run_str = getenv(DRY_RUN_ENV_VAR);
