@@ -14,7 +14,7 @@
  * shown in the examples to follow. Also be sure that you DO NOT include a trailing '/' in the path
  * argument.
  *
- *     # orangefs-purge /path/of/orangefs/directory/to/be/purged
+ *     # orangefs-purge [OPTIONS]... /path/of/orangefs/directory/to/be/purged
  *
  * To understand the effects of running this program without deleting any files, set the DRY_RUN
  * environment variable to 1. This will behave exactly as above except the files will not be
@@ -142,6 +142,7 @@ struct purge_stats_s {
 struct option const long_opts[] =
 {
     {"removal-basis-time", required_argument, NULL, 'r'},
+    {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
@@ -173,14 +174,15 @@ void orangefs_purge_option_init(struct orangefs_purge_options_s *x)
 void usage(int status)
 {
     printf("Usage: %s [OPTION]... <ABSOLUTE_PATH_OF_DIRECTORY_TO_BE_PURGED>\n", PROGRAM_NAME);
-    fputs("\
+    printf("\n\
     Purges OrangeFS files based on the removal-basis-time. If atime and mtime values of a file\n\
     are both less than the removal-basis-time then the file will be purged.\n\n\
+        -h, --help                  show help/usage information.\n\
+        -?\n\n\
         -r, --removal-basis-time    supply your own removal-basis-time (in seconds since the\n\
                                     UNIX epoch), rather than relying on the default which is 31\n\
-                                    days previous to this program's execution time.\n",
-        stdout);
-    exit (status);
+                                    days previous to this program's execution time.\n");
+    exit(status);
 }
 
 /* Log purge statistics */
@@ -622,8 +624,8 @@ cleanup:
 }
 
 
-/* This main program accepts one argument, the absolute path of the directory tree to be walked for
- * purging of expired files. */
+/* This program accepts options defined above and following them **one** directory argugument, the
+ * absolute path of the directory tree to be walked for purging of expired files. */
 int main(int argc, char **argv)
 {
     PVFS_time current_time = 0LL;
@@ -661,12 +663,16 @@ TODO
 
     orangefs_purge_option_init(&opts);
 
-    while((c = getopt_long(argc, argv, "r:", long_opts, NULL)) != -1)
+    while((c = getopt_long(argc, argv, "?hr:", long_opts, NULL)) != -1)
     {
         switch (c)
         {
             case 'r':
                 opts.removal_basis_time = strtoull(optarg, NULL, 0);
+                break;
+            case '?':
+            case 'h':
+                usage(EXIT_SUCCESS);
                 break;
             default:
                 usage(EXIT_FAILURE);
