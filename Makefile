@@ -4,7 +4,6 @@
 #
 # File: Makefile
 # Author: Jeff Denton
-# Last Updated: 12/16/2015
 
 # Point this to your OrangeFS installation prior to running 'make'.
 ORANGEFS_PREFIX=/opt/orangefs
@@ -12,6 +11,8 @@ ORANGEFS_PREFIX=/opt/orangefs
 # Customize these to your liking
 ORANGEFS_PURGE_LOG_DIR=/var/log/orangefs-purge
 ORANGEFS_PURGE_INSTALL_DIR=/usr/local/sbin
+
+all: orangefs-purge
 
 orangefs-purge: orangefs-purge.c
 	gcc -g -Wall -O2 \
@@ -22,13 +23,14 @@ orangefs-purge: orangefs-purge.c
 	    -D USING_PINT_MALLOC=1 \
 	    -o orangefs-purge \
 	    -I${ORANGEFS_PREFIX}/include \
-	     orangefs-purge.c \
+	    orangefs-purge.c \
 	    -L${ORANGEFS_PREFIX}/lib \
 	    -lorangefsposix
 
 install: orangefs-purge
 	install --mode=700 --directory ${ORANGEFS_PURGE_LOG_DIR}
 	install --mode=700 orangefs-purge ${ORANGEFS_PURGE_INSTALL_DIR}
+	install --mode=700 scripts/orangefs-purge-user-dirs.sh ${ORANGEFS_PURGE_INSTALL_DIR}
 
 clean:
 	rm -f \

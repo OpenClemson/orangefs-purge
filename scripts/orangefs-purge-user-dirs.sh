@@ -2,17 +2,21 @@
 
 # File: scripts/orangefs-purge-user-dirs.sh
 # Author: Jeff Denton
-# Last Updated: 12/31/2015
 
 # ==================================================================================================
 # Usage:
 # --------------------------------------------------------------------------------------------------
-#   # orangefs-purge-user-dirs.sh [users_dir] [exclusions_file]
+usage()
+{
+    echo "Usage: ${0} [-e <exclusions_file>] [-l <log_dir>] [-t <purge_time_threshold] users_dir" 1>&2;
+    exit $1;
+}
 #
-# NOTE Where users_dir is the parent directory where all of your "user directories" reside.
+# NOTE Where users_dir is a required argument that is the parent directory where all of your "user
+#      directories" reside.
 # NOTE Where exclusions_file is a file that contains the absolute path of all the user directories
 #      that you would like excluded from being purged.
-# NOTE The defaults for those options can be found below under 'Configurables'.
+# NOTE The defaults for the options can be found below under 'Configurables'.
 #
 # Example:
 #
@@ -24,7 +28,7 @@
 #
 # Sample execution and output (output will be tab delimited key value pairs):
 # --------------------------------------------------------------------------------------------------
-#  # orangefs-purge-user-dirs.sh
+#  # orangefs-purge-user-dirs.sh /mnt/orangefs
 #  START_TIME      1451576306
 #  REMOVAL_BASIS_TIME      1448897906
 #  excluding       /mnt/orangefs/david
@@ -46,7 +50,7 @@
 # ==================================================================================================
 
 # Must be run as root!
-if [[ $EUID -ne 0 ]]; then
+if [[ ${EUID} -ne 0 ]]; then
    echo "This script must be run as root!" 1>&2
    exit 1
 fi
@@ -54,68 +58,116 @@ fi
 # Configurables:
 # ==================================================================================================
     # The absolute path of the directory that contains all of  your "user directories".
-readonly USERS_DIR=${1:-"/mnt/orangefs"}
+USERS_DIR=
     # File containing a list of absolute paths of user directories that you don't want to scan with
     # orangefs-purge. This will only work for directories one level deeper than the USERS_DIR 
     # defined above.
-readonly EXCLUSIONS_LIST_FILE=${2:-"/usr/local/etc/orangefs-purge-exclude"}
-readonly PURGE_WINDOW=$(echo $[60 * 60 * 24 * 31]) # 31 days
-readonly LOG_DIR="/var/log/orangefs-purge"
+EXCLUSIONS_LIST_FILE="/usr/local/etc/orangefs-purge-exclude"
+LOG_DIR="/var/log/orangefs-purge"
+declare -i PURGE_TIME_THRESHOLD=$[60 * 60 * 24 * 31] # 31 days
 # ==================================================================================================
 
+while getopts ":he:l:t:" o; do
+    case "${o}" in
+        e)
+            EXCLUSIONS_LIST_FILE=${OPTARG}
+            if ! [[ -f ${EXCLUSIONS_LIST_FILE} && -r ${EXCLUSIONS_LIST_FILE} ]]; then
+                ERROR_MESSAGE="EXCLUSIONS_LIST_FILE does not exist or has incorrect permissions!"
+                ERROR_MESSAGE="${ERROR_MESSAGE} EXCLUSIONS_LIST_FILE=${EXCLUSIONS_LIST_FILE}"
+                echo ${ERROR_MESSAGE} 1>&2
+                usage 1
+            fi
+            ;;
+        l)
+            LOG_DIR=${OPTARG}
+            ;;
+        t)
+            PURGE_TIME_THRESHOLD=${OPTARG}
+            ;;
+        h)
+            usage 0
+            ;;
+        *)
+            usage 1
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
 
-# Using the current time when this script is executed compute the REMOVAL_BASIS_TIME by subtracting
-# a length of time (in seconds). Any files with both atime and mtime less than the
-# REMOVAL_BASIS_TIME will be removed!
+# The last argument should be the "users" directory.
+USERS_DIR=${1}
+if ! [[ -d ${USERS_DIR} && -r ${USERS_DIR} ]]; then
+    echo "USERS_DIR does not exist or has incorrect permissions! USERS_DIR=${USERS_DIR}" 1>&2
+    usage 1
+fi
+
+# Make sure LOG_DIR exists and has all of the necessary permissions
+if ! [[ -d ${LOG_DIR} && -r ${LOG_DIR} && -w ${LOG_DIR} && -x ${LOG_DIR} ]]; then
+    echo "LOG_DIR does not exist or has incorrect permissions! LOG_DIR=${LOG_DIR}" 1>&2
+    usage 1
+fi
+
+echo -e "USERS_DIR\t${USERS_DIR}"
+echo -e "EXCLUSIONS_LIST_FILE\t${EXCLUSIONS_LIST_FILE}"
+echo -e "LOG_DIR\t${LOG_DIR}"
+echo -e "PURGE_TIME_THRESHOLD\t${PURGE_TIME_THRESHOLD}"
+#exit 0
+
+# To compute the REMOVAL_BASIS_TIME, substract the PURGE_TIME_THRESHOLD from the current time.
+# Any files with both atime and mtime less than the REMOVAL_BASIS_TIME will be removed!
 readonly START_TIME=$(echo $(date +%s))
-readonly REMOVAL_BASIS_TIME=$(echo $[$START_TIME - $PURGE_WINDOW])
+readonly REMOVAL_BASIS_TIME=$(echo $[${START_TIME} - ${PURGE_TIME_THRESHOLD}])
 
-echo -e "START_TIME\t$START_TIME"
-echo -e "REMOVAL_BASIS_TIME\t$REMOVAL_BASIS_TIME"
+echo -e "START_TIME\t${START_TIME}"
+echo -e "REMOVAL_BASIS_TIME\t${REMOVAL_BASIS_TIME}"
 
-if [ -r "$EXCLUSIONS_LIST_FILE" ]; then 
+# Create subdirectory pertaining to this run so the many generated log files can be easily grouped
+LOG_DIR="${LOG_DIR}/${START_TIME}"
+mkdir "${LOG_DIR}" && chmod u+rwx "${LOG_DIR}"
+
+if [ -r "${EXCLUSIONS_LIST_FILE}" ]; then 
     # Build up a string of exclusions to pass to find
-    cat "$EXCLUSIONS_LIST_FILE" |
+    cat "${EXCLUSIONS_LIST_FILE}" |
     {
         EXCLUSIONS=""
         while read dir; do
-            if [ -d "$dir" ]; then
+            if [ -d "${dir}" ]; then
                 # WARNING Exlusion of directory paths containing whitespace will not be handled
                 # correctly! As is, if your exclusions list file contains paths with whitespace,
                 # the find command will probably fail and therefor no "users log" will be generated
                 # which means the later cat command on it will fail and NO purging will take place.
-                echo -e "excluding\t$dir"
-                EXCLUSIONS="$EXCLUSIONS -not -path $dir" 
+                echo -e "excluding\t${dir}"
+                EXCLUSIONS="${EXCLUSIONS} -not -path ${dir}" 
             fi
         done
 
         # Use find to determine all of the user directories and execute the orangefs-purge program
         # on each one using the predetermined removal-basis-time above.
-        find $USERS_DIR -mindepth 1 -maxdepth 1 -type d $EXCLUSIONS -exec bash -c \
-            "echo '{}' >> \"$LOG_DIR/users-dirs-$START_TIME.log\"" \;
+        find ${USERS_DIR} -mindepth 1 -maxdepth 1 -type d ${EXCLUSIONS} -exec bash -c \
+            "echo '{}' >> \"${LOG_DIR}/users-dirs\"" \;
     }
 else
     # No exclusions file found.
-    find $USERS_DIR -mindepth 1 -maxdepth 1 -type d -exec bash -c \
-        "echo '{}' >> \"$LOG_DIR/users-dirs-$START_TIME.log\"" \;
+    find ${USERS_DIR} -mindepth 1 -maxdepth 1 -type d -exec bash -c \
+        "echo '{}' >> \"${LOG_DIR}/users-dirs\"" \;
 fi
 
 # Loop over the generated file and execute orangefs-purge once per line/directory.
-# I'm not too concerned with wacky file names such as those with spaces since user level
-# directories are associated with a user's username.
-cat "$LOG_DIR/users-dirs-$START_TIME.log" | sort |
+# I'm not too concerned with wacky file names such as those with whitespace since user level
+# directories are associated with a user's username which should not contain those characters.
+cat "${LOG_DIR}/users-dirs" | sort |
 {
     while read dir; do
-        # TODO enable passing of LOG_DIR to orangefs-purge
-        echo -e "purging\t$dir"
-        DRY_RUN=1 /usr/local/sbin/orangefs-purge \
-            --removal-basis-time=$REMOVAL_BASIS_TIME \
-            "$dir" \
-            2>>"${LOG_DIR}/orangefs-purge.stderr" || >&2 printf "FAILED\t$dir\n"
+        echo -e "purging\t${dir}"
+        /usr/local/sbin/orangefs-purge \
+            --log-dir "${LOG_DIR}" \
+            --removal-basis-time=${REMOVAL_BASIS_TIME} \
+            "${dir}" \
+            2>>"${LOG_DIR}/orangefs-purge.stderr" || >&2 printf "FAILED\t${dir}\n"
     done
 }
 
 readonly FINISH_TIME=$(echo $(date +%s))
-readonly DURATION_SECONDS=$[$FINISH_TIME - $START_TIME]
-echo -e "FINISH_TIME\t$FINISH_TIME"
-echo -e "DURATION_SECONDS\t$DURATION_SECONDS"
+readonly DURATION_SECONDS=$[${FINISH_TIME} - ${START_TIME}]
+echo -e "FINISH_TIME\t${FINISH_TIME}"
+echo -e "DURATION_SECONDS\t${DURATION_SECONDS}"

@@ -5,7 +5,6 @@
  *
  * File: orangefs-purge.c
  * Author: Jeff Denton
- * Last Updated: 12/16/2015
  *
  * Usage:
  * -------------------------------------------------------------------------------------------------
@@ -16,26 +15,35 @@
  *
  *     # orangefs-purge [OPTIONS]... /path/of/orangefs/directory/to/be/purged
  *
- * To understand the effects of running this program without deleting any files, set the DRY_RUN
- * environment variable to 1. This will behave exactly as above except the files will not be
- * removed. This will help you understand what might be removed as a result of a later true purge.
+ * To understand the effects of running this program without deleting any files, pass the
+ * -d or --dry-run flag or set the DRY_RUN environment variable to 1. This will behave exactly as
+ * above except the files will not be removed. This will help you understand what might be removed
+ * as a result of a later true purge.
+ *
+ *     # orangefs-purge --dry-run /path/of/orangefs/directory/to/be/purged
+ *
+ *  OR...
  *
  *     # DRY_RUN=1 orangefs-purge /path/of/orangefs/directory/to/be/purged
  *
- * Note, using DRY_RUN=0 will purge files!
+ * Note, if the dry-run command line flag is not set, using DRY_RUN=0 will purge files!
  *
  * Various results of the purge are logged in the following file:
  *
- *     /var/log/orangefs-purge/<integer_timestamp_of_program_start_time>-<basename of directory argument>.log
+ *     <log_dir>/<integer_timestamp_of_program_start_time>-<basename of directory argument>.log
  *
  * This allows you to run this program as a cron job and have a separate log file for each execution
  * of the program.
+ *
+ * Note, log_dir defaults to /var/log/orangefs-purge/.
  *
  * Executing the following command enables the creation of a separate log for multiple "user
  * directories". Note, this will cause one scan to be run per user directory rather than one scan of
  * the overall parent directory:
  *
  *     find /users -mindepth 1 -maxdepth 1 -type d -exec bash -c "orangefs-purge '{}'" \;
+ *
+ * The above approach is used in the following script: ./scripts/orangefs-purge-user-dirs.sh
  *
  * Note, the parent directory of the log file must exist and be writable. "make install" will
  * attempt to set this up for you!.
@@ -105,7 +113,7 @@
 #include <pvfs2-usrint.h>
 
 #define PROGRAM_NAME "orangefs-purge"
-#define LOG_DIR             "/var/log/orangefs-purge"
+#define DEFAULT_LOG_DIR "/var/log/orangefs-purge"
 #define DRY_RUN_ENV_VAR     "DRY_RUN"
 
 #define DAY_SECS            (24 * 60 * 60)
@@ -141,14 +149,18 @@ struct purge_stats_s {
 
 struct option const long_opts[] =
 {
+    {"dry-run", no_argument, NULL, 'd'},
+    {"log-dir", required_argument, NULL, 'l'},
     {"removal-basis-time", required_argument, NULL, 'r'},
     {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
 };
 
-struct orangefs_purge_options_s
+struct options_s
 {
     PVFS_time removal_basis_time;
+    char *log_dir;
+    int dry_run;
 };
 
 /* For any of this to work, the system time must be correct and roughly in sync between all the
@@ -164,21 +176,28 @@ struct purge_stats_s pstats = {0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL, 0LL};
 PVFS_credential creds;
 PVFS_time removal_basis_time = 0LL;
 FILE *logp = NULL;
-int dry_run = 0;
+struct options_s opts;
 
-void orangefs_purge_option_init(struct orangefs_purge_options_s *x)
+void orangefs_purge_option_init(struct options_s *x)
 {
     x->removal_basis_time = 0LL;
+    x->log_dir = NULL;
+    x->dry_run = 0;
 }
 
 void usage(int status)
 {
     printf("Usage: %s [OPTION]... <ABSOLUTE_PATH_OF_DIRECTORY_TO_BE_PURGED>\n", PROGRAM_NAME);
     printf("\n\
-    Purges OrangeFS files based on the removal-basis-time. If atime and mtime values of a file\n\
-    are both less than the removal-basis-time then the file will be purged.\n\n\
+    Walks an OrangeFS directory tree and purges OrangeFS files based on the removal-basis-time.\n\
+    If the atime and mtime values of a file are both less than the removal-basis-time then the\n\
+    file will be purged.\n\n\
         -h, --help                  show help/usage information.\n\
         -?\n\n\
+        -d, --dry-run               does not remove any files but otherwise proceeds as normal.\n\n\
+        -l, --log-dir               specify the absolute path of the directory where you want\n\
+                                    orangefs-purge to generate its log file. The default is:\n\
+                                    /var/log/orangefs-purge/.\n\n\
         -r, --removal-basis-time    supply your own removal-basis-time (in seconds since the\n\
                                     UNIX epoch), rather than relying on the default which is 31\n\
                                     days previous to this program's execution time.\n");
@@ -398,7 +417,6 @@ int sys_attr_to_stat(struct stat *bufp, PVFS_sys_attr *attrp, PVFS_object_ref re
     return 0;
 }
 
-
 /* Walks an OrangeFS directory tree using a recursive algorithm and the PVFS_sys_readdirplus
  * function which is the most efficient way to gather stats from multiple entries at once when using
  * OrangeFS.
@@ -518,7 +536,7 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
                         fprintf(logp, "R\t%s\n", dirent_path);
 #endif
 
-                        if(!dry_run)
+                        if(!opts.dry_run)
                         {
                             ret = PVFS_sys_remove(rdplus_response.dirent_array[i].d_name,
                                                 *dir_refp,
@@ -643,7 +661,6 @@ int main(int argc, char **argv)
     PVFS_sysresp_lookup lk_response;
     int ret;
     int c;
-    struct orangefs_purge_options_s opts;
     PVFS_fs_id fs_id;
 
     if(geteuid() != 0)
@@ -654,10 +671,16 @@ int main(int argc, char **argv)
 
     orangefs_purge_option_init(&opts);
 
-    while((c = getopt_long(argc, argv, "?hr:", long_opts, NULL)) != -1)
+    while((c = getopt_long(argc, argv, "?dhl:r:", long_opts, NULL)) != -1)
     {
         switch (c)
         {
+            case 'd':
+                opts.dry_run = 1;
+                break;
+            case 'l':
+                opts.log_dir = strdup(optarg);
+                break;
             case 'r':
                 opts.removal_basis_time = strtoull(optarg, NULL, 0);
                 break;
@@ -680,10 +703,13 @@ int main(int argc, char **argv)
     dry_run_str = getenv(DRY_RUN_ENV_VAR);
     if(dry_run_str)
     {
-        dry_run = atoi(dry_run_str);
-        if(dry_run != 0)
+        /* Use a local variable here instead of opts.dry_run so that if the environment variable is
+         * set to false, it cannot override the dry-run command line flag if it is used. */
+        int dr = atoi(dry_run_str);
+
+        if(dr != 0)
         {
-            dry_run = 1;
+            opts.dry_run = 1;
         }
     }
 
@@ -726,7 +752,7 @@ int main(int argc, char **argv)
 
     if((ret = lstat(dir, &arg_stat)))
     {
-        perror("Could not stat path supplied as the first argument, reason= ");
+        perror("ERROR: Could not stat path supplied as the first argument, reason= ");
         ret = -1;
         goto cleanup_cred;
     }
@@ -778,7 +804,7 @@ int main(int argc, char **argv)
                           NULL);
     if(ret < 0)
     {
-        PVFS_perror("PVFS_sys_lookup", ret);
+        PVFS_perror("ERROR: PVFS_sys_lookup", ret);
         ret = -1;
         goto cleanup_cred;
     }
@@ -811,49 +837,58 @@ int main(int argc, char **argv)
     removal_basis_time_str = human_readable_time(removal_basis_time);
 
     /* determine basename of supplied path and embed it in the log file name. */
-    snprintf(log_path, PATH_MAX, "%s/%llu-%s.log", LOG_DIR, LLU(current_time), basename(dir));
+    snprintf(log_path,
+             PATH_MAX,
+             "%s/%llu-%s.log",
+             opts.log_dir ? opts.log_dir : DEFAULT_LOG_DIR,
+             LLU(current_time),
+             basename(dir));
     DEBUG("INFO: log_path\t%s\n", log_path);
     logp = fopen(log_path, "w");
     if(!logp)
     {
-        fprintf(stderr, "Couldn't open orangefs-purge log for appending. Now logging to stderr!\n");
+        fprintf(stderr,
+                "ERROR: Couldn't open orangefs-purge log. Now logging to stderr!\n");
         logp = stderr;
     }
 
     fprintf(logp, "directory\t%s\n", dir);
-    fprintf(logp, "dry_run\t%s\n", dry_run == 0 ? "false" : "true");
+    fprintf(logp, "dry_run\t%s\n", opts.dry_run == 0 ? "false" : "true");
     fprintf(logp, "current_time\t%llu\n", LLU(current_time));
     fprintf(logp, "current_time_str\t%s", current_time_str);
     fprintf(logp, "removal_basis_time\t%llu\n", LLU(removal_basis_time));
     fprintf(logp, "removal_basis_time_str\t%s", removal_basis_time_str);
+    free(current_time_str);
+    free(removal_basis_time_str);
 
     ret = walk_rdp_and_purge(dir, &dir_ref);
 
     finish_time = get_current_time();
     finish_time_str = human_readable_time(finish_time);
-
     fprintf(logp, "finish_time\t%llu\n", LLU(finish_time));
     fprintf(logp, "finish_time_str\t%s", finish_time_str);
+    free(finish_time_str);
+
     fprintf(logp, "duration_seconds\t%llu\n", LLU(finish_time - current_time));
     log_pstats(logp, &pstats);
     log_pstats_more(logp, &pstats);
-
-    free(current_time_str);
-    free(removal_basis_time_str);
-    free(finish_time_str);
 
 cleanup_cred:
     /* NOTE It would be nice to have a cleanup function for apps generating their own creds e.g.
      * PINT_cleanup_credential(&creds); */
 
+    free(opts.log_dir);
+
     if(ret == 0)
     {
         fprintf(logp, "purge_success\ttrue\n");
+        fclose(logp);
         return 0;
     }
     else
     {
         fprintf(logp, "purge_success\tfalse\n");
+        fclose(logp);
         return 1;
     }
 }
