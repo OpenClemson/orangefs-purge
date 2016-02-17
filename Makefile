@@ -16,8 +16,6 @@ all: orangefs-purge
 
 orangefs-purge: orangefs-purge.c
 	gcc -g -Wall -O2 \
-	    -D FILES_REMOVED_LOGGER_ENABLED=0 \
-	    -D FILES_KEPT_LOGGER_ENABLED=0 \
 	    -D DEBUG_ON=0 \
 	    -D USE_DEFAULT_CREDENTIAL_TIMEOUT=0 \
 	    -D USING_PINT_MALLOC=1 \

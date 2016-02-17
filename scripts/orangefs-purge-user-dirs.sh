@@ -162,6 +162,7 @@ cat "${LOG_DIR}/users-dirs" | sort |
         /usr/local/sbin/orangefs-purge \
             --log-dir "${LOG_DIR}" \
             --removal-basis-time=${REMOVAL_BASIS_TIME} \
+            ${ORANGEFS_PURGE_EXTRA_OPTS} -- \
             "${dir}" \
             2>>"${LOG_DIR}/orangefs-purge.stderr" || >&2 printf "FAILED\t${dir}\n"
     done

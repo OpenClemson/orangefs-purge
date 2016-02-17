@@ -53,11 +53,27 @@
  *
  *     0 3 1 * * orangefs-purge /path/of/orangefs/directory/to/be/purged 2>/var/log/orangefs-purge/orangefs-purge.stderr
  *
- * You may enable or disable the logging of removed files and kept files by setting the following
- * "defines" in the associated Makefile (a value of 0 disables and a value of 1 enables):
+ * You may optionally enable logging of files identified for removal by passing the following option
+ * to orangefs-purge:
  *
- *   FILES_REMOVED_LOGGER_ENABLED
- *   FILES_KEPT_LOGGER_ENABLED
+ *     --log-removed-files
+ *
+ *     NOTE: If you are doing a dry-run, files are not actually removed, yet they will be logged.
+ *
+ * Output will be a 'R' character followed by a single tab character followed by the absolute path
+ * of the file:
+ *
+ *     R[ tab ]/users/myusername/myfile
+ *
+ * You may optionally enable logging of files identified for keeping by passing the following option
+ * to orangefs-purge:
+ *
+ *     --log-kept-files
+ *
+ * Output will be a 'K' character followed by a single tab character followed by the absolute path
+ * of the file:
+ *
+ *     K[ tab ]/users/myusername/myfile
  *
  * -------------------------------------------------------------------------------------------------
  *
@@ -147,10 +163,18 @@ struct purge_stats_s {
     uint64_t unknown;       /* Number of dirents with unknown type discovered. */
 };
 
+typedef enum
+{
+    LOG_REMOVED_FILES = 256, /* well outside the range of ASCII characters one would use for opts */
+    LOG_KEPT_FILES
+} long_opts_no_char_type;
+
 struct option const long_opts[] =
 {
     {"dry-run", no_argument, NULL, 'd'},
     {"log-dir", required_argument, NULL, 'l'},
+    {"log-removed-files", no_argument, NULL, LOG_REMOVED_FILES},
+    {"log-kept-files", no_argument, NULL, LOG_KEPT_FILES},
     {"removal-basis-time", required_argument, NULL, 'r'},
     {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -161,6 +185,8 @@ struct options_s
     PVFS_time removal_basis_time;
     char *log_dir;
     int dry_run;
+    int log_removed_files;
+    int log_kept_files;
 };
 
 /* For any of this to work, the system time must be correct and roughly in sync between all the
@@ -183,6 +209,8 @@ void orangefs_purge_option_init(struct options_s *x)
     x->removal_basis_time = 0LL;
     x->log_dir = NULL;
     x->dry_run = 0;
+    x->log_removed_files = 0;
+    x->log_kept_files = 0;
 }
 
 void usage(int status)
@@ -198,6 +226,8 @@ void usage(int status)
         -l, --log-dir               specify the absolute path of the directory where you want\n\
                                     orangefs-purge to generate its log file. The default is:\n\
                                     /var/log/orangefs-purge/.\n\n\
+            --log-kept-files        logs all files that will be kept.\n\n\
+            --log-removed-files     logs all files that will be removed.\n\n\
         -r, --removal-basis-time    supply your own removal-basis-time (in seconds since the\n\
                                     UNIX epoch), rather than relying on the default which is 31\n\
                                     days previous to this program's execution time.\n");
@@ -531,10 +561,10 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
                     if(buf.st_atime < (time_t) removal_basis_time &&
                        buf.st_mtime < (time_t) removal_basis_time)
                     {
-
-#if FILES_REMOVED_LOGGER_ENABLED == 1
-                        fprintf(logp, "R\t%s\n", dirent_path);
-#endif
+                        if(opts.log_removed_files)
+                        {
+                            fprintf(logp, "R\t%s\n", dirent_path);
+                        }
 
                         if(!opts.dry_run)
                         {
@@ -562,10 +592,10 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
                     }
                     else
                     {
-
-#if FILES_KEPT_LOGGER_ENABLED == 1
-                        fprintf(logp, "K\t%s\n", dirent_path);
-#endif
+                        if(opts.log_kept_files)
+                        {
+                            fprintf(logp, "K\t%s\n", dirent_path);
+                        }
 
                         pstats.kept_fils++;
                         pstats.kept_bytes += buf.st_size;
@@ -680,6 +710,12 @@ int main(int argc, char **argv)
                 break;
             case 'l':
                 opts.log_dir = strdup(optarg);
+                break;
+            case LOG_REMOVED_FILES:
+                opts.log_removed_files = 1;
+                break;
+            case LOG_KEPT_FILES:
+                opts.log_kept_files = 1;
                 break;
             case 'r':
                 opts.removal_basis_time = strtoull(optarg, NULL, 0);
