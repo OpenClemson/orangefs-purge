@@ -1,5 +1,5 @@
 /*
- * (C) 2015 Clemson University
+ * (C) 2016 Clemson University
  *
  * See LICENSE in top-level directory.
  *

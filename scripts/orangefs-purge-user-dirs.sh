@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-
+#
+# (C) 2016 Clemson University
+#
+# See LICENSE in top-level directory.
+#
 # File: scripts/orangefs-purge-user-dirs.sh
 # Author: Jeff Denton
 
