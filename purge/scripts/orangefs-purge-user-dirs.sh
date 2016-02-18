@@ -55,14 +55,18 @@ usage()
 
 # Must be run as root!
 if [[ ${EUID} -ne 0 ]]; then
-   echo "This script must be run as root!" 1>&2
-   exit 1
+    echo "This script must be run as root!" 1>&2
+    exit 1
 fi
+
+# The absolute path of the directory that contains all of  your "user directories".
+USERS_DIR=
+
+# Should the orangefs-purge-logs2df.py script be run on the generated log files
+ANALYTICS_ENABLED=false
 
 # Configurables:
 # ==================================================================================================
-    # The absolute path of the directory that contains all of  your "user directories".
-USERS_DIR=
     # File containing a list of absolute paths of user directories that you don't want to scan with
     # orangefs-purge. This will only work for directories one level deeper than the USERS_DIR 
     # defined above.
@@ -71,8 +75,20 @@ LOG_DIR="/var/log/orangefs-purge"
 declare -i PURGE_TIME_THRESHOLD=$[60 * 60 * 24 * 31] # 31 days
 # ==================================================================================================
 
-while getopts ":he:l:t:" o; do
+if [ -z "${ORANGEFS_PURGE_INSTALL_DIR}" ]; then
+    ORANGEFS_PURGE_INSTALL_DIR=/usr/local/sbin
+fi
+
+if [ ! -x "${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge" ]; then
+    echo "orangefs-purge binary not found or you don't have permission to execute it!" 1>&2
+    exit 1
+fi
+
+while getopts ":hae:l:t:" o; do
     case "${o}" in
+        a)
+            ANALYTICS_ENABLED=true
+            ;;
         e)
             EXCLUSIONS_LIST_FILE=${OPTARG}
             if ! [[ -f ${EXCLUSIONS_LIST_FILE} && -r ${EXCLUSIONS_LIST_FILE} ]]; then
@@ -115,7 +131,6 @@ echo -e "USERS_DIR\t${USERS_DIR}"
 echo -e "EXCLUSIONS_LIST_FILE\t${EXCLUSIONS_LIST_FILE}"
 echo -e "LOG_DIR\t${LOG_DIR}"
 echo -e "PURGE_TIME_THRESHOLD\t${PURGE_TIME_THRESHOLD}"
-#exit 0
 
 # To compute the REMOVAL_BASIS_TIME, substract the PURGE_TIME_THRESHOLD from the current time.
 # Any files with both atime and mtime less than the REMOVAL_BASIS_TIME will be removed!
@@ -163,14 +178,37 @@ cat "${LOG_DIR}/users-dirs" | sort |
 {
     while read dir; do
         echo -e "purging\t${dir}"
-        /usr/local/sbin/orangefs-purge \
+        ${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge \
             --log-dir "${LOG_DIR}" \
             --removal-basis-time=${REMOVAL_BASIS_TIME} \
             ${ORANGEFS_PURGE_EXTRA_OPTS} -- \
             "${dir}" \
-            2>>"${LOG_DIR}/orangefs-purge.stderr" || >&2 printf "FAILED\t${dir}\n"
+            2>>"${LOG_DIR}/orangefs-purge.err" || >&2 printf "FAILED\t${dir}\n"
     done
 }
+
+if [ ${ANALYTICS_ENABLED} = true ]; then
+    echo -e "ANALYTICS_ENABLED\ttrue"
+
+    if [ ! -x "${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge-logs2df.py" ]; then
+        echo "orangefs-purge-logs2df.py script not found or you don't have permission to execute it!" 1>&2
+        exit 1
+    fi
+
+    ${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge-logs2df.py \
+        ${LOG_DIR} \
+        ${LOG_DIR} \
+        "report-${START_TIME}" \
+        2>>"${LOG_DIR}/orangefs-purge-logs2df.err" 1>> "${LOG_DIR}/orangefs-purge-logs2df.out"
+
+    if [ $? = 0 ]; then
+        echo -e "ANALYTICS_SUCCESS\ttrue"
+    else
+        echo -e "ANALYTICS_SUCCESS\tfalse"
+    fi
+else
+    echo -e "ANALYTICS_ENABLED\tfalse"
+fi
 
 readonly FINISH_TIME=$(echo $(date +%s))
 readonly DURATION_SECONDS=$[${FINISH_TIME} - ${START_TIME}]
