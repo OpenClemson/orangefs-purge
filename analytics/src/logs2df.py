@@ -42,9 +42,8 @@ def parse_log_files(log_files):
 # Sorts by user
 def set_index(df, prefix='/mnt/orangefs/'):
     df['user'] = df.apply(lambda x: x['directory'][len(prefix):], axis=1)
-    df = df.set_index('user')
+    df.set_index('user', inplace=True)
     df.sort_index(inplace=True)
-    return df
 
 def convert_columns(df):
     uint64_columns = [
@@ -84,8 +83,6 @@ def convert_columns(df):
     df['removal_basis_time'] = pd.to_datetime(df['removal_basis_time'],unit='s')
     df['finish_time'] = pd.to_datetime(df['finish_time'],unit='s')
 
-    return df
-
 def format_xlsx_sheet(df, sheet):
 
     column_widths = []
@@ -114,8 +111,6 @@ def format_xlsx_sheet(df, sheet):
     for column in sheet.columns:
         for cell in column:
             cell.font = font
-
-    return sheet
 
 def error(*objs):
     print("ERROR: ", *objs, file=sys.stderr)
@@ -173,7 +168,7 @@ if __name__ == '__main__':
 
     print('Computing the user field from the directory field and setting the user field as the\n',
           '    index of the DataFrame:\n')
-    df = set_index(df)
+    set_index(df)
     df.info()
     print('\n\n')
 
@@ -183,7 +178,7 @@ if __name__ == '__main__':
     print('\n\n')
 
     print('Converting all column data types to their proper data type:\n')
-    df = convert_columns(df)
+    convert_columns(df)
     df.info()
     print('\n\n')
 
@@ -230,7 +225,7 @@ if __name__ == '__main__':
     writer = pd.ExcelWriter(xlsx_out)
     df.to_excel(writer, 'results')
     # Auto-configure the column width and set monospace font
-    writer.sheets['results'] = format_xlsx_sheet(df, writer.sheets['results'])
+    format_xlsx_sheet(df, writer.sheets['results'])
     print('\n    DONE!\n\n')
 
     print('Writing DataFrame to .xlsx format:\n')
