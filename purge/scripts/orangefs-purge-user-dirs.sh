@@ -4,7 +4,7 @@
 #
 # See LICENSE in top-level directory.
 #
-# File: scripts/orangefs-purge-user-dirs.sh
+# File: purge/scripts/orangefs-purge-user-dirs.sh
 # Author: Jeff Denton
 
 # ==================================================================================================

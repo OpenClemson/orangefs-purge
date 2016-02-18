@@ -1,4 +1,4 @@
-# (C) 2015 Clemson University
+# (C) 2016 Clemson University
 #
 # See LICENSE in top-level directory.
 #
@@ -14,22 +14,25 @@ ORANGEFS_PURGE_INSTALL_DIR=/usr/local/sbin
 
 all: orangefs-purge
 
-orangefs-purge: orangefs-purge.c
+orangefs-purge: purge/src/orangefs-purge.c
+	mkdir -p bin
 	gcc -g -Wall -O2 \
 	    -D DEBUG_ON=0 \
 	    -D USE_DEFAULT_CREDENTIAL_TIMEOUT=0 \
 	    -D USING_PINT_MALLOC=1 \
-	    -o orangefs-purge \
+	    -o bin/orangefs-purge \
 	    -I${ORANGEFS_PREFIX}/include \
-	    orangefs-purge.c \
+	    purge/src/orangefs-purge.c \
 	    -L${ORANGEFS_PREFIX}/lib \
 	    -lorangefsposix
 
 install: orangefs-purge
 	install --mode=700 --directory ${ORANGEFS_PURGE_LOG_DIR}
-	install --mode=700 orangefs-purge ${ORANGEFS_PURGE_INSTALL_DIR}
-	install --mode=700 scripts/orangefs-purge-user-dirs.sh ${ORANGEFS_PURGE_INSTALL_DIR}
+	install --mode=700 bin/orangefs-purge ${ORANGEFS_PURGE_INSTALL_DIR}
+	install --mode=700 purge/scripts/orangefs-purge-user-dirs.sh ${ORANGEFS_PURGE_INSTALL_DIR}
+	install --mode=700 analytics/scripts/orangefs-purge-logs2df.py \
+	    ${ORANGEFS_PURGE_INSTALL_DIR}
 
 clean:
 	rm -f \
-	    orangefs-purge
+	    bin/orangefs-purge

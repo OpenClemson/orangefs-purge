@@ -3,7 +3,7 @@
  *
  * See LICENSE in top-level directory.
  *
- * File: orangefs-purge.c
+ * File: purge/src/orangefs-purge.c
  * Author: Jeff Denton
  *
  * Usage:

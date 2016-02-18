@@ -4,7 +4,7 @@
 #
 # See LICENSE in top-level directory.
 #
-# File: analytics/src/logs2df.py
+# File: analytics/scripts/orangefs-purge-logs2df.py
 # Author: Jeff Denton
 #
 from __future__ import print_function

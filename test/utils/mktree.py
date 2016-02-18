@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+#
+# (C) 2016 Clemson University
+#
+# See LICENSE in top-level directory.
+#
+# File: test/utils/mktree.py
+# Author: Jeff Denton
+#
 from __future__ import print_function
 import os
 import random
