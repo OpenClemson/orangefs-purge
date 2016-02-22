@@ -91,6 +91,7 @@ def convert_columns(df):
     df['removal_basis_time'] = pd.to_datetime(df['removal_basis_time'],unit='s')
     df['finish_time'] = pd.to_datetime(df['finish_time'],unit='s')
 
+# Only works with sheets created by openpyxl engine
 def format_xlsx_sheet(df, sheet):
 
     column_widths = []
@@ -230,8 +231,9 @@ if __name__ == '__main__':
     print('    DONE!\n\n')
 
     print('Preparing .xlsx document:\n')
+    pd.set_option('io.excel.xlsx.writer', 'openpyxl')
     writer = pd.ExcelWriter(xlsx_out)
-    df.to_excel(writer, 'results')
+    df.to_excel(writer, 'results', engine='openpyxl')
     # Auto-configure the column width and set monospace font
     format_xlsx_sheet(df, writer.sheets['results'])
     print('\n    DONE!\n\n')
