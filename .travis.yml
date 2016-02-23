@@ -28,17 +28,17 @@ before_install:
       g++
   - wget http://www.orangefs.org/downloads/LATEST/source/orangefs-2.9.3.tar.gz
   - tar -xzf orangefs-2.9.3.tar.gz
+  - cd orangefs-2.9.3
   - |
-    cd orangefs-2.9.3 && \
     ./configure \
       --prefix=/opt/orangefs \
       --enable-shared \
-      --with-kernel=/lib/modules/$(uname -r)/build && \
-    make -j$(nproc) && \
-    make kmod && \
-    sudo make install && \
-    sudo make kmod_prefix=/opt/orangefs kmod_install && \
-    cd -
+      --with-kernel=/lib/modules/$(uname -r)/build
+  - make -j$(nproc)
+  - make kmod
+  - sudo make install
+  - sudo make kmod_prefix=/opt/orangefs kmod_install
+  - cd -
   - pwd
   - ls -lah
 
@@ -73,8 +73,8 @@ after_success:
   - sleep 3
   - /opt/orangefs/sbin/pvfs2-server /home/travis/storage/orangefs-server.conf
   - sleep 3
-  - /opt/orangefs/sbin/pvfs2-client
+  - sudo /opt/orangefs/sbin/pvfs2-client
   - sleep 3
   - pgrep -l pvfs2
-  - mount -t pvfs2 tcp://$(hostname):3334/orangefs /mnt/orangefs
+  - sudo mount -t pvfs2 tcp://$(hostname):3334/orangefs /mnt/orangefs
   - ls -lahR /mnt/orangefs
