@@ -1,7 +1,14 @@
+env:
+- LD_LIBRARY_PATH="/opt/orangefs/lib"
+
 before_install:
+  - hostname
+  - hostname -f
   - pwd
   - ls -lah
   - sudo apt-get -qq update
+  - sudo apt-get install -y python-pip
+  - sudo pip install pandas openpyxl
   - |
     sudo apt-get install -y gcc \
       flex \
@@ -39,3 +46,35 @@ before_script:
   - ls -lahR /opt/orangefs
 
 script: make && sudo make install
+
+after_success:
+  - ldd /opt/orangefs/sbin/pvfs2-server
+  - ldd /opt/orangefs/sbin/pvfs2-client
+  - ldd /opt/orangefs/sbin/pvfs2-client-core
+  - ldd /usr/local/sbin/orangefs-purge
+  - sudo insmod /opt/orangefs/lib/modules/$(uname -r)/kernel/fs/pvfs2/pvfs2.ko
+  - sudo mkdir /mnt/orangefs
+  - sudo bash -c 'echo "tcp://$(hostname):3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" > /etc/pvfs2tab'
+  - cat /etc/pvfs2tab
+  - mkdir ~/storage
+  - |
+    /opt/orangefs/bin/pvfs2-genconfig \
+      --protocol tcp \
+      --ioservers $(hostname) \
+      --metaservers $(hostname) \
+      --tcpport 3334 \
+      --storage /home/travis/storage/data \
+      --metadata /home/travis/storage/meta \
+      --logfile /home/travis/storage/orangefs-server.log \
+      --quiet \
+      /home/travis/storage/orangefs-server.conf
+  - cat /home/travis/storage/orangefs-server.conf
+  - /opt/orangefs/sbin/pvfs2-server /home/travis/storage/orangefs-server.conf -f
+  - sleep 3
+  - /opt/orangefs/sbin/pvfs2-server /home/travis/storage/orangefs-server.conf
+  - sleep 3
+  - /opt/orangefs/sbin/pvfs2-client
+  - sleep 3
+  - pgrep -l pvfs2
+  - mount -t pvfs2 tcp://$(hostname):3334/orangefs /mnt/orangefs
+  - ls -lahR /mnt/orangefs
