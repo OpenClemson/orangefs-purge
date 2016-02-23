@@ -2,6 +2,8 @@ env:
 - LD_LIBRARY_PATH="/opt/orangefs/lib"
 
 before_install:
+  - sudo bash -c 'echo "LD_LIBRARY_PATH=/opt/orangefs/lib" >> /etc/environment'
+  - sudo env | grep LD_LIBRARY_PATH
   - hostname
   - hostname -f
   - pwd
@@ -49,9 +51,9 @@ script: make && sudo make install
 
 after_success:
   - ldd /opt/orangefs/sbin/pvfs2-server
-  - ldd /opt/orangefs/sbin/pvfs2-client
-  - ldd /opt/orangefs/sbin/pvfs2-client-core
-  - ldd /usr/local/sbin/orangefs-purge
+  - sudo ldd /opt/orangefs/sbin/pvfs2-client
+  - sudo ldd /opt/orangefs/sbin/pvfs2-client-core
+  - sudo ldd /usr/local/sbin/orangefs-purge
   - sudo insmod /opt/orangefs/lib/modules/$(uname -r)/kernel/fs/pvfs2/pvfs2.ko
   - sudo mkdir /mnt/orangefs
   - sudo bash -c 'echo "tcp://$(hostname):3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" > /etc/pvfs2tab'
