@@ -127,9 +127,9 @@ def error(*objs):
 if __name__ == '__main__':
 
     if(len(sys.argv) != 5):
-        error("Usage: ", sys.argv[0], '<purged_dir> <log_dir> <out_dir> <file_name>\n',
+        error("Usage: ", sys.argv[0], '<users_dir> <log_dir> <out_dir> <file_name>\n',
               '\n\twhere:\n',
-              '\t\t<purged_dir> is the directory passed to orangefs-purge-user-dirs.sh\n',
+              '\t\t<users_dir> is the directory passed to orangefs-purge-user-dirs.sh\n',
               '\t\t<log_dir> is the directory containing your log results from orangefs-purge\n',
               '\t\t<out_dir> is the directory where your generated files will be written\n',
               '\t\t<file_name> is the file name prefix given to the generated .pkl and .xlsx' +
@@ -137,12 +137,12 @@ if __name__ == '__main__':
         exit(1)
 
     # Used to convert full user directory path to user name
-    purged_dir = sys.argv[1]
-    if not os.access(purged_dir, os.F_OK):
-        error("purged_dir argument must exist!")
+    users_dir = sys.argv[1]
+    if not os.access(users_dir, os.F_OK):
+        error("users_dir argument must exist!")
         exit(1)
-    if not purged_dir.endswith('/'):
-        purged_dir += '/'
+    if not users_dir.endswith('/'):
+        users_dir += '/'
 
     log_dir = sys.argv[2]
     if not os.access(log_dir, os.R_OK | os.X_OK):
@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
     print('Computing the user field from the directory field and setting the user field as the\n',
           '    index of the DataFrame:\n')
-    set_index(df, purged_dir)
+    set_index(df, users_dir)
     df.info()
     print('\n\n')
 

@@ -12,7 +12,7 @@
 # --------------------------------------------------------------------------------------------------
 usage()
 {
-    echo "Usage: ${0} [-e <exclusions_file>] [-l <log_dir>] [-t <purge_time_threshold] users_dir" 1>&2;
+    echo "Usage: ${0} [-a ] [-e <exclusions_file>] [-l <log_dir>] [-t <purge_time_threshold] users_dir" 1>&2;
     exit $1;
 }
 #
@@ -196,6 +196,7 @@ if [ ${ANALYTICS_ENABLED} = true ]; then
     fi
 
     ${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge-logs2df.py \
+        ${USERS_DIR} \
         ${LOG_DIR} \
         ${LOG_DIR} \
         "report-${START_TIME}" \
