@@ -48,7 +48,7 @@ def parse_log_files(log_files):
 # Strip the mount prefix from each user directory to create the user field
 # Makes the user column the index.
 # Sorts by user
-def set_index(df, prefix='/mnt/orangefs/'):
+def set_index(df, prefix):
     df['user'] = df.apply(lambda x: x['directory'][len(prefix):], axis=1)
     df.set_index('user', inplace=True)
     df.sort_index(inplace=True)
@@ -126,27 +126,36 @@ def error(*objs):
 
 if __name__ == '__main__':
 
-    if(len(sys.argv) != 4):
-        error("Usage: ", sys.argv[0], '<log_dir> <out_dir> <file_name>\n',
+    if(len(sys.argv) != 5):
+        error("Usage: ", sys.argv[0], '<purged_dir> <log_dir> <out_dir> <file_name>\n',
               '\n\twhere:\n',
-              '\t\t<log_dir> is the directory containing your log results from orangefs-purge:\n',
+              '\t\t<purged_dir> is the directory passed to orangefs-purge-user-dirs.sh\n',
+              '\t\t<log_dir> is the directory containing your log results from orangefs-purge\n',
               '\t\t<out_dir> is the directory where your generated files will be written\n',
               '\t\t<file_name> is the file name prefix given to the generated .pkl and .xlsx' +
               ' files\n')
         exit(1)
 
-    log_dir = sys.argv[1]
+    # Used to convert full user directory path to user name
+    purged_dir = sys.argv[1]
+    if not os.access(purged_dir, os.F_OK):
+        error("purged_dir argument must exist!")
+        exit(1)
+    if not purged_dir.endswith('/'):
+        purged_dir += '/'
+
+    log_dir = sys.argv[2]
     if not os.access(log_dir, os.R_OK | os.X_OK):
         error("log_dir argument must have both read and execute permissions set!")
         exit(1)
 
-    out_dir = sys.argv[2]
+    out_dir = sys.argv[3]
     if not os.access(out_dir, os.R_OK | os.W_OK | os.X_OK):
         error("out_dir argument must have: read, write, and execute permissions set!")
         exit(1)
 
-    pkl_out = out_dir + os.sep + sys.argv[3] + '.pkl'
-    xlsx_out = out_dir + os.sep + sys.argv[3] + '.xlsx'
+    pkl_out = out_dir + os.sep + sys.argv[4] + '.pkl'
+    xlsx_out = out_dir + os.sep + sys.argv[4] + '.xlsx'
 
     if os.access(pkl_out, os.F_OK) or os.access(xlsx_out, os.F_OK):
         error('One or more of the files to be generated already exists!\n'
@@ -177,7 +186,7 @@ if __name__ == '__main__':
 
     print('Computing the user field from the directory field and setting the user field as the\n',
           '    index of the DataFrame:\n')
-    set_index(df)
+    set_index(df, purged_dir)
     df.info()
     print('\n\n')
 
