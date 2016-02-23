@@ -1,0 +1,31 @@
+before_install:
+  - sudo apt-get -qq update
+  - |
+    sudo apt-get install -y gcc \
+      flex \
+      bison \
+      libssl-dev \
+      libdb-dev \
+      linux-source \
+      perl \
+      make \
+      autoconf \
+      linux-headers-`uname -r` \
+      zip \
+      openssl \
+      automake \
+      autoconf \
+      patch \
+      g++
+  - wget https://www.orangefs.org/downloads/LATEST/source/orangefs-2.9.3.tar.gz
+  - tar -xzf orangefs-2.9.3.tar.gz
+  - |
+    cd orangefs-2.9.3 && \
+    ./configure --prefix=/opt/orangefs --enable-shared && \
+    make && \
+    sudo make install
+
+before_script:
+  - ls -lahR /opt/orangefs
+
+script: make && sudo make install
