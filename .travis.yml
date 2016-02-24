@@ -1,7 +1,7 @@
 env:
 - LD_LIBRARY_PATH="/opt/orangefs/lib"
 
-before_install:
+install:
   - sudo bash -c 'echo "LD_LIBRARY_PATH=/opt/orangefs/lib" >> /etc/environment'
   - sudo env | grep LD_LIBRARY_PATH
   - hostname
@@ -42,23 +42,14 @@ before_install:
   - sudo make kmod_prefix=/opt/orangefs kmod_install
   - cd -
   - pwd
-  - ls -lah
-
-before_script:
   - ls -lahR /opt/orangefs
 
-script: make && sudo make install
-
-after_success:
-  - ldd /opt/orangefs/sbin/pvfs2-server
-  - sudo ldd /opt/orangefs/sbin/pvfs2-client
-  - sudo ldd /opt/orangefs/sbin/pvfs2-client-core
-  - sudo ldd /usr/local/sbin/orangefs-purge
-  - sudo insmod /opt/orangefs/lib/modules/$(uname -r)/kernel/fs/pvfs2/pvfs2.ko
+before_script:
+  - mkdir ~/storage
   - sudo mkdir /mnt/orangefs
+  - sudo insmod /opt/orangefs/lib/modules/$(uname -r)/kernel/fs/pvfs2/pvfs2.ko
   - sudo bash -c 'echo "tcp://$(hostname):3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" > /etc/pvfs2tab'
   - cat /etc/pvfs2tab
-  - mkdir ~/storage
   - |
     /opt/orangefs/bin/pvfs2-genconfig \
       --protocol tcp \
@@ -80,3 +71,11 @@ after_success:
   - pgrep -l pvfs2
   - sudo mount -t pvfs2 tcp://$(hostname):3334/orangefs /mnt/orangefs
   - ls -lahR /mnt/orangefs
+
+script:
+  - make
+  - sudo make install
+  - sudo ldd /usr/local/sbin/orangefs-purge
+  - sudo ./test/utils/mktree.py /mnt/orangefs
+  - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a
+  - sudo ls -lahR /var/log/orangefs-purge
