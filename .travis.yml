@@ -77,5 +77,5 @@ script:
   - sudo make install
   - sudo ldd /usr/local/sbin/orangefs-purge
   - sudo ./test/utils/mktree.py /mnt/orangefs
-  - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a
+  - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a /mnt/orangefs
   - sudo ls -lahR /var/log/orangefs-purge
