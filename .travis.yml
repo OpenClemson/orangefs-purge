@@ -72,5 +72,5 @@ script:
   - sudo ./test/utils/mktree.py /mnt/orangefs 10
   - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a /mnt/orangefs
   - sudo ls -lahR /var/log/orangefs-purge
-  - cat /var/log/orangefs-purge/*/orangefs-purge-logs2df.out
-  - cat /var/log/orangefs-purge/*/orangefs-purge-logs2df.err
+  - sudo cat /var/log/orangefs-purge/*/orangefs-purge-logs2df.out
+  - sudo cat /var/log/orangefs-purge/*/orangefs-purge-logs2df.err
