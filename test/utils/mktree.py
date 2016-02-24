@@ -62,7 +62,7 @@ def mkuser_dirs(parent, num_users):
 
 if __name__ == '__main__':
 
-    if(len(sys.argv) != 2):
+    if(len(sys.argv) != 3):
         error('Usage: ', sys.argv[0], '<users_dir> <num_users>\n',
             '\n\twhere:\n',
             '\t\t<users_dir> is the directory where the random users\' directories will be generated\n',
