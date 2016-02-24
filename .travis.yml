@@ -1,16 +1,11 @@
-env:
-- LD_LIBRARY_PATH="/opt/orangefs/lib"
-
 install:
-  - sudo bash -c 'echo "LD_LIBRARY_PATH=/opt/orangefs/lib" >> /etc/environment'
-  - sudo env | grep LD_LIBRARY_PATH
   - hostname
   - hostname -f
   - pwd
   - ls -lah
   - sudo apt-get -qq update
-  - sudo apt-get install -y python-pip
-  - sudo pip install pandas openpyxl
+  - sudo apt-get install -y python-pip python-pandas
+  - sudo pip install openpyxl
   - |
     sudo apt-get install -y gcc \
       flex \
@@ -34,7 +29,6 @@ install:
   - |
     ./configure \
       --prefix=/opt/orangefs \
-      --enable-shared \
       --with-kernel=/lib/modules/$(uname -r)/build
   - make -j$(nproc)
   - make kmod
@@ -75,7 +69,6 @@ before_script:
 script:
   - make
   - sudo make install
-  - sudo ldd /usr/local/sbin/orangefs-purge
-  - sudo ./test/utils/mktree.py /mnt/orangefs
+  - sudo ./test/utils/mktree.py /mnt/orangefs 10
   - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a /mnt/orangefs
   - sudo ls -lahR /var/log/orangefs-purge
