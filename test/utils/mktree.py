@@ -20,7 +20,7 @@ MIN_FILE_WIDTH = 0
 MAX_FILE_WIDTH = 10
 
 NOW = int(time.time())
-FILE_NOT_USED_MAX_SECS = 60 * 60 * 24 * 60 # 60 days in seconds 
+FILE_NOT_USED_MAX_SECS = 60 * 60 * 24 * 60 # 60 days in seconds
 
 def error(*objs):
     print("ERROR: ", *objs, file=sys.stderr)
@@ -62,20 +62,21 @@ def mkuser_dirs(parent, num_users):
 
 if __name__ == '__main__':
 
-    if(len(sys.argv[1]) == 0):
-        error("Please provide an absolute path as the first argument to this script!")
+    if(len(sys.argv) != 2):
+        error('Usage: ', sys.argv[0], '<users_dir> <num_users>\n',
+            '\n\twhere:\n',
+            '\t\t<users_dir> is the directory where the random users\' directories will be generated\n',
+            '\t\t<num_users> is the number of random users\' directories to be created by this script\n')
         exit(1)
-
-    num_users = 52
 
     # Ensure that supplied directory path is writable and executable
     if not os.access(sys.argv[1], os.W_OK | os.X_OK):
         error("Please verify that the supplied absolute path exists and is writable!")
         exit(1)
 
+    num_users = int(sys.argv[2])
     user_dirs = mkuser_dirs(sys.argv[1], num_users)
 
-    #print(user_dirs)
     for user_dir in user_dirs:
         print("generating random directory tree under path: " + user_dir)
         mktree(user_dir,
