@@ -25,9 +25,9 @@ install:
       autoconf \
       patch \
       g++
-  - wget http://www.orangefs.org/downloads/LATEST/source/orangefs-2.9.3.tar.gz
-  - tar -xzf orangefs-2.9.3.tar.gz
-  - cd orangefs-2.9.3
+  - wget http://download.orangefs.org/current/source/orangefs-2.9.5.tar.gz
+  - tar -xzf orangefs-2.9.5.tar.gz
+  - cd orangefs-2.9.5
   - |
     ./configure \
       --prefix=/opt/orangefs \
