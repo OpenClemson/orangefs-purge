@@ -135,7 +135,13 @@
 #define DAY_SECS            (24 * 60 * 60)
 #define THIRTYONE_DAYS_SECS (31 * DAY_SECS)
 
-#define PVFS_REQ_LIMIT_DIRENT_COUNT_READDIRPLUS 60
+/* Declaration of PVFS_REQ_LIMIT_DIRENT_COUNT_READDIRPLUS is no longer
+ * required since OrangeFS version 2.9.6 because this #define is now exposed
+ * in the pvfs2-types.h file:
+ */
+#ifndef PVFS_REQ_LIMIT_DIRENT_COUNT_READDIRPLUS
+    #define PVFS_REQ_LIMIT_DIRENT_COUNT_READDIRPLUS 60
+#endif
 
 #define LLU(x) ((long long unsigned int) (x))
 
@@ -496,7 +502,7 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
         ret = PVFS_sys_readdirplus(*dir_refp,
                                 token,
                                 PVFS_REQ_LIMIT_DIRENT_COUNT_READDIRPLUS,
-                                &creds, 
+                                &creds,
                                 PVFS_ATTR_SYS_ALL_NOHINT,
                                 &rdplus_response,
                                 NULL);
@@ -644,10 +650,12 @@ int walk_rdp_and_purge(char *path, PVFS_object_ref *dir_refp)
              * Is there a problem with PINT_MALLOC?
              * Why can't I just free! */
 #if USING_PINT_MALLOC == 1
+            /* TODO This was required prior to OrangeFS 2.9.5or6? */
             free((char *) (rdplus_response.dirent_array) - 32);
             free((char *) (rdplus_response.stat_err_array) - 32);
             free((char *) (rdplus_response.attr_array) - 32);
 #else
+            /* This seems to work in version OrangeFS 2.9.6 */
             free(rdplus_response.dirent_array);
             free(rdplus_response.stat_err_array);
             free(rdplus_response.attr_array);
@@ -802,9 +810,9 @@ int main(int argc, char **argv)
         goto cleanup_cred;
     }
 
-    ret = PVFS_util_resolve(dir, 
-                            &fs_id, 
-                            resolved_path, 
+    ret = PVFS_util_resolve(dir,
+                            &fs_id,
+                            resolved_path,
                             PVFS_PATH_MAX);
 
     if (ret < 0)

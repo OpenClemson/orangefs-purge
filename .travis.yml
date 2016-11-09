@@ -1,33 +1,53 @@
 language: c
+sudo: required
+
+env:
+  global:
+    - OFS_URL_P0='https://s3.amazonaws.com/download.orangefs.org/releases/'
+    - OFS_URL_P1='/source/orangefs-'
+    - OFS_URL_P2='.tar.gz'
+  matrix:
+    allow_failures:
+      - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.3
+      - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.5
+      - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.6
+      - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.3
+      - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.5
+      - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.6
+
+addons:
+  apt:
+    packages:
+    - gcc
+    - flex
+    - bison
+    - libssl-dev
+    - libdb-dev
+    - linux-source
+    - perl
+    - make
+    - autoconf
+    - linux-headers-$(uname -r)
+    - zip
+    - openssl
+    - automake
+    - autoconf
+    - patch
+    - g++
+    - python-pip
 
 install:
   - hostname
   - hostname -f
   - pwd
   - ls -lah
-  - sudo apt-get -qq update
-  - sudo apt-get install -y python-pip
+  #- sudo apt-get -qq update
+  #- sudo apt-get install -y python-pip
   - sudo pip install pandas openpyxl
-  - |
-    sudo apt-get install -y gcc \
-      flex \
-      bison \
-      libssl-dev \
-      libdb-dev \
-      linux-source \
-      perl \
-      make \
-      autoconf \
-      linux-headers-$(uname -r) \
-      zip \
-      openssl \
-      automake \
-      autoconf \
-      patch \
-      g++
-  - wget http://download.orangefs.org/current/source/orangefs-2.9.5.tar.gz
-  - tar -xzf orangefs-2.9.5.tar.gz
-  - cd orangefs-2.9.5
+  #- sudo apt-get install -y linux-headers-$(uname -r)
+  - wget "${OFS_URL_P0}${OFS_RELEASE}${OFS_URL_P1}${OFS_RELEASE}${OFS_URL_P2}"
+  - tar -xzf orangefs-${OFS_RELEASE}.tar.gz
+  - cd orangefs-${OFS_RELEASE}
   - |
     ./configure \
       --prefix=/opt/orangefs \
