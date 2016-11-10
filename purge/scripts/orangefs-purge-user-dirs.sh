@@ -68,7 +68,7 @@ ANALYTICS_ENABLED=false
 # Configurables:
 # ==================================================================================================
     # File containing a list of absolute paths of user directories that you don't want to scan with
-    # orangefs-purge. This will only work for directories one level deeper than the USERS_DIR 
+    # orangefs-purge. This will only work for directories one level deeper than the USERS_DIR
     # defined above.
 EXCLUSIONS_LIST_FILE="/usr/local/etc/orangefs-purge-exclude"
 LOG_DIR="/var/log/orangefs-purge"
@@ -144,7 +144,7 @@ echo -e "REMOVAL_BASIS_TIME\t${REMOVAL_BASIS_TIME}"
 LOG_DIR="${LOG_DIR}/${START_TIME}"
 mkdir "${LOG_DIR}" && chmod u+rwx "${LOG_DIR}"
 
-if [ -r "${EXCLUSIONS_LIST_FILE}" ]; then 
+if [ -r "${EXCLUSIONS_LIST_FILE}" ]; then
     # Build up a string of exclusions to pass to find
     cat "${EXCLUSIONS_LIST_FILE}" |
     {
@@ -156,7 +156,7 @@ if [ -r "${EXCLUSIONS_LIST_FILE}" ]; then
                 # the find command will probably fail and therefor no "users log" will be generated
                 # which means the later cat command on it will fail and NO purging will take place.
                 echo -e "excluding\t${dir}"
-                EXCLUSIONS="${EXCLUSIONS} -not -path ${dir}" 
+                EXCLUSIONS="${EXCLUSIONS} -not -path ${dir}"
             fi
         done
 
@@ -174,6 +174,7 @@ fi
 # Loop over the generated file and execute orangefs-purge once per line/directory.
 # I'm not too concerned with wacky file names such as those with whitespace since user level
 # directories are associated with a user's username which should not contain those characters.
+purge_error_encountered=false
 cat "${LOG_DIR}/users-dirs" | sort |
 {
     while read dir; do
@@ -184,9 +185,14 @@ cat "${LOG_DIR}/users-dirs" | sort |
             ${ORANGEFS_PURGE_EXTRA_OPTS} -- \
             "${dir}" \
             2>>"${LOG_DIR}/orangefs-purge.err" || >&2 printf "FAILED\t${dir}\n"
+
+        if [[ $? -ne 0 ]]; then
+            purge_error_encountered=true
+        fi
     done
 }
 
+analytics_error_encountered=false
 if [ ${ANALYTICS_ENABLED} = true ]; then
     echo -e "ANALYTICS_ENABLED\ttrue"
 
@@ -202,10 +208,11 @@ if [ ${ANALYTICS_ENABLED} = true ]; then
         "report-${START_TIME}" \
         2>>"${LOG_DIR}/orangefs-purge-logs2df.err" 1>> "${LOG_DIR}/orangefs-purge-logs2df.out"
 
-    if [ $? = 0 ]; then
+    if [[ $? -eq 0 ]]; then
         echo -e "ANALYTICS_SUCCESS\ttrue"
     else
         echo -e "ANALYTICS_SUCCESS\tfalse"
+        analytics_error_encountered=true
     fi
 else
     echo -e "ANALYTICS_ENABLED\tfalse"
@@ -215,3 +222,8 @@ readonly FINISH_TIME=$(echo $(date +%s))
 readonly DURATION_SECONDS=$[${FINISH_TIME} - ${START_TIME}]
 echo -e "FINISH_TIME\t${FINISH_TIME}"
 echo -e "DURATION_SECONDS\t${DURATION_SECONDS}"
+
+# Return an error if any purge fails or if the analysis fails
+if [[ "$purge_error_encountered" = true || "$analytics_error_encountered" = true ]]; then
+    exit 1
+fi
