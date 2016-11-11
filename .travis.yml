@@ -38,18 +38,13 @@ addons:
     - libldap-2.4-2
     - libldap2-dev
     - libattr1-dev
-    - python-pip
 
 install:
   - hostname
   - hostname -f
   - pwd
   - ls -lah
-  #- sudo apt-get -qq update
-  #- sudo apt-get install -y python-pip
-  #- sudo pip install pandas openpyxl
   - sudo pip install ${PIP_ARGS}
-  #- sudo apt-get install -y linux-headers-$(uname -r)
   - wget "${OFS_URL_P0}${OFS_RELEASE}${OFS_URL_P1}${OFS_RELEASE}${OFS_URL_P2}"
   - tar -xzf orangefs-${OFS_RELEASE}.tar.gz
   - cd orangefs-${OFS_RELEASE}
@@ -99,4 +94,6 @@ script:
   - sudo ./test/utils/mktree.py /mnt/orangefs 150
   - sudo /usr/local/sbin/orangefs-purge-user-dirs.sh -a /mnt/orangefs
   - sudo ls -lahR /var/log/orangefs-purge
-  - sudo find /var/log/orangefs-purge -type f -exec cat {} \;
+  - sudo find /var/log/orangefs-purge -type f -iname "*.log" -exec cat {} \;
+  - sudo find /var/log/orangefs-purge -type f -iname "*.out" -exec cat {} \;
+  - sudo find /var/log/orangefs-purge -type f -iname "*.err" -exec cat {} \;

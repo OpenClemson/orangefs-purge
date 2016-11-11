@@ -146,25 +146,23 @@ mkdir "${LOG_DIR}" && chmod u+rwx "${LOG_DIR}"
 
 if [ -r "${EXCLUSIONS_LIST_FILE}" ]; then
     # Build up a string of exclusions to pass to find
-    cat "${EXCLUSIONS_LIST_FILE}" |
-    {
-        EXCLUSIONS=""
-        while read dir; do
-            if [ -d "${dir}" ]; then
-                # WARNING Exlusion of directory paths containing whitespace will not be handled
-                # correctly! As is, if your exclusions list file contains paths with whitespace,
-                # the find command will probably fail and therefor no "users log" will be generated
-                # which means the later cat command on it will fail and NO purging will take place.
-                echo -e "excluding\t${dir}"
-                EXCLUSIONS="${EXCLUSIONS} -not -path ${dir}"
-            fi
-        done
+    EXCLUSIONS=""
+    while read dir; do
+        if [ -d "${dir}" ]; then
+            # WARNING Exlusion of directory paths containing whitespace will not be handled
+            # correctly! As is, if your exclusions list file contains paths with whitespace,
+            # the find command will probably fail and therefor no "users log" will be generated
+            # which means the later cat command on it will fail and NO purging will take place.
+            echo -e "excluding\t${dir}"
+            EXCLUSIONS="${EXCLUSIONS} -not -path ${dir}"
+        fi
+    done <<< "$(cat ${EXCLUSIONS_LIST_FILE})" # Only this part runs in a subshell!
 
-        # Use find to determine all of the user directories and execute the orangefs-purge program
-        # on each one using the predetermined removal-basis-time above.
-        find ${USERS_DIR} -mindepth 1 -maxdepth 1 -type d ${EXCLUSIONS} -exec bash -c \
-            "echo '{}' >> \"${LOG_DIR}/users-dirs\"" \;
-    }
+    # Use find to determine all of the user directories and execute the orangefs-purge program
+    # on each one using the predetermined removal-basis-time above.
+    find ${USERS_DIR} -mindepth 1 -maxdepth 1 -type d ${EXCLUSIONS} -exec bash -c \
+        "echo '{}' >> \"${LOG_DIR}/users-dirs\"" \;
+
 else
     # No exclusions file found.
     find ${USERS_DIR} -mindepth 1 -maxdepth 1 -type d -exec bash -c \
@@ -175,22 +173,23 @@ fi
 # I'm not too concerned with wacky file names such as those with whitespace since user level
 # directories are associated with a user's username which should not contain those characters.
 purge_error_encountered=false
-cat "${LOG_DIR}/users-dirs" | sort |
-{
-    while read dir; do
-        echo -e "purging\t${dir}"
-        ${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge \
-            --log-dir "${LOG_DIR}" \
-            --removal-basis-time=${REMOVAL_BASIS_TIME} \
-            ${ORANGEFS_PURGE_EXTRA_OPTS} -- \
-            "${dir}" \
-            2>>"${LOG_DIR}/orangefs-purge.err" || >&2 printf "FAILED\t${dir}\n"
+# Using a 'here string' to re-write the while loop to be in the main shell
+# process so that value of purge_error_encountered is not destroyed as was
+# happening in the previous version of this section of code.
+while read dir; do
+    echo -e "purging\t${dir}"
+    ${ORANGEFS_PURGE_INSTALL_DIR}/orangefs-purge \
+        --log-dir "${LOG_DIR}" \
+        --removal-basis-time=${REMOVAL_BASIS_TIME} \
+        ${ORANGEFS_PURGE_EXTRA_OPTS} -- \
+        "${dir}" \
+        2>>"${LOG_DIR}/orangefs-purge.err"
 
-        if [[ $? -ne 0 ]]; then
-            purge_error_encountered=true
-        fi
-    done
-}
+    if [[ $? -ne 0 ]]; then
+        >&2 printf "FAILED\t${dir}\n"
+        purge_error_encountered=true
+    fi
+done <<< "$(cat ${LOG_DIR}/users-dirs | sort)" # Only this part runs in a subshell!
 
 analytics_error_encountered=false
 if [ ${ANALYTICS_ENABLED} = true ]; then
