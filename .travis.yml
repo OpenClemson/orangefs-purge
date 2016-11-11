@@ -1,4 +1,6 @@
-language: c
+language: python
+python:
+      - "3.5"
 sudo: required
 
 env:
@@ -7,12 +9,12 @@ env:
     - OFS_URL_P1='/source/orangefs-'
     - OFS_URL_P2='.tar.gz'
   matrix:
-    - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.3
-    - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.5
-    - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.6
-    - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.3
-    - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.5
-    - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.6
+    #- USING_PINT_MALLOC=0 OFS_RELEASE=2.9.3 PIP_ARGS='-r requirements.txt'
+    #- USING_PINT_MALLOC=0 OFS_RELEASE=2.9.5 PIP_ARGS='-r requirements.txt'
+    - USING_PINT_MALLOC=0 OFS_RELEASE=2.9.6 PIP_ARGS='-r requirements.txt'
+    #- USING_PINT_MALLOC=1 OFS_RELEASE=2.9.3 PIP_ARGS='-r requirements.txt'
+    #- USING_PINT_MALLOC=1 OFS_RELEASE=2.9.5 PIP_ARGS='-r requirements.txt'
+    - USING_PINT_MALLOC=1 OFS_RELEASE=2.9.6 PIP_ARGS='-r requirements.txt'
 
 addons:
   apt:
@@ -45,7 +47,8 @@ install:
   - ls -lah
   #- sudo apt-get -qq update
   #- sudo apt-get install -y python-pip
-  - sudo pip install pandas openpyxl
+  #- sudo pip install pandas openpyxl
+  - sudo pip install ${PIP_ARGS}
   #- sudo apt-get install -y linux-headers-$(uname -r)
   - wget "${OFS_URL_P0}${OFS_RELEASE}${OFS_URL_P1}${OFS_RELEASE}${OFS_URL_P2}"
   - tar -xzf orangefs-${OFS_RELEASE}.tar.gz
